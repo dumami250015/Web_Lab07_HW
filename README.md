@@ -1,26 +1,142 @@
-# REPORT LAB 07 HOMEWORK
-## Product Management System - Spring Boot Application
+# LAB 07: Product Management System - Homework Exercises
 
-This document explains the workflow and implementation details of all exercises (5-8) in the Product Management System.
+## Student Information
+- **Name:** [Your Name]
+- **Student ID:** [Your Student ID]
+- **Class:** [Your Class]
+
+## Technologies Used
+- Spring Boot 3.5.x
+- Spring Data JPA
+- Hibernate ORM
+- MySQL 8.0
+- Thymeleaf Template Engine
+- Jakarta Validation
+- Maven
+
+## Setup Instructions
+1. Import project into VS Code
+2. Create database: `product_management`
+3. Update `application.properties` with your MySQL credentials
+4. Run: `mvn spring-boot:run`
+5. Open browser: http://localhost:8080/products
+6. Access dashboard: http://localhost:8080/dashboard
+
+## Completed Features
+- [x] Exercise 5: Advanced Search (12 points)
+  - [x] Task 5.1: Multi-Criteria Search
+  - [x] Task 5.2: Category Filter
+  - [x] Task 5.3: Search with Pagination
+- [x] Exercise 6: Validation (10 points)
+  - [x] Task 6.1: Validation Annotations
+  - [x] Task 6.2: Controller Validation
+  - [x] Task 6.3: Display Validation Errors
+- [x] Exercise 7: Sorting & Filtering (10 points)
+  - [x] Task 7.1: Sorting
+  - [x] Task 7.2: Category Filter
+  - [x] Task 7.3: Combined Sorting and Filtering
+- [x] Exercise 8: Statistics Dashboard (8 points)
+  - [x] Task 8.1: Statistics Methods
+  - [x] Task 8.2: Dashboard Controller
+  - [x] Task 8.3: Dashboard View
+
+## Project Structure
+```
+product-management/
+├── src/
+│   ├── main/
+│   │   ├── java/com/example/product_management/
+│   │   │   ├── ProductManagementApplication.java
+│   │   │   ├── entity/
+│   │   │   │   └── Product.java
+│   │   │   ├── repository/
+│   │   │   │   └── ProductRepository.java
+│   │   │   ├── service/
+│   │   │   │   ├── ProductService.java
+│   │   │   │   └── ProductServiceImpl.java
+│   │   │   └── controller/
+│   │   │       ├── ProductController.java
+│   │   │       └── DashboardController.java
+│   │   └── resources/
+│   │       ├── application.properties
+│   │       └── templates/
+│   │           ├── product-list.html
+│   │           ├── product-form.html
+│   │           └── dashboard.html
+├── pom.xml
+└── README.md
+```
 
 ---
 
-## Table of Contents
-
-1. [Exercise 5: Advanced Search](#exercise-5-advanced-search-12-points)
-2. [Exercise 6: Validation](#exercise-6-validation-10-points)
-3. [Exercise 7: Sorting & Filtering](#exercise-7-sorting--filtering-10-points)
-4. [Exercise 8: Statistics Dashboard](#exercise-8-statistics-dashboard-8-points)
-
----
+# Code Flow
 
 ## Exercise 5: Advanced Search (12 Points)
 
 ### Task 5.1: Multi-Criteria Search (6 Points)
 
-**Objective:** Allow users to search products by multiple criteria simultaneously.
+**Objective:** Allow users to search products by multiple criteria (name, category, price range).
 
-#### Repository Layer (`ProductRepository.java`)
+**Step A: User Fills Advanced Search Form**
+1. **User Request**: User accesses `/products` and sees the Advanced Search form.
+2. **View Layer** (`product-list.html`):
+   - Form displays input fields for name, category dropdown, min price, and max price.
+   - Form action points to `/products/advanced-search` with GET method.
+
+```html
+<form th:action="@{/products/advanced-search}" method="get">
+    <input type="text" name="name" placeholder="Search by name..." />
+    <select name="category">
+        <option value="">All Categories</option>
+        <option th:each="cat : ${categories}" th:value="${cat}" th:text="${cat}"></option>
+    </select>
+    <input type="number" name="minPrice" step="0.01" placeholder="Min Price" />
+    <input type="number" name="maxPrice" step="0.01" placeholder="Max Price" />
+    <button type="submit">Search</button>
+</form>
+```
+
+**Step B: Controller Receives Search Parameters**
+1. **Controller Layer** (`ProductController.java`):
+   - The `advancedSearch` method mapped to `@GetMapping("/advanced-search")` is invoked.
+   - All parameters are optional (`required = false`).
+   - Calls `productService.advancedSearch(name, category, minPrice, maxPrice)`.
+
+```java
+@GetMapping("/advanced-search")
+public String advancedSearch(
+        @RequestParam(required = false) String name,
+        @RequestParam(required = false) String category,
+        @RequestParam(required = false) BigDecimal minPrice,
+        @RequestParam(required = false) BigDecimal maxPrice,
+        Model model) {
+    
+    List<Product> products = productService.advancedSearch(name, category, minPrice, maxPrice);
+    model.addAttribute("products", products);
+    model.addAttribute("categories", productService.getAllCategories());
+    return "product-list";
+}
+```
+
+**Step C: Service Processes the Search**
+1. **Service Layer** (`ProductServiceImpl.java`):
+   - Converts empty strings to null for proper JPQL handling.
+   - Delegates to repository method.
+
+```java
+@Override
+public List<Product> advancedSearch(String name, String category, 
+                                    BigDecimal minPrice, BigDecimal maxPrice) {
+    String searchName = (name != null && name.trim().isEmpty()) ? null : name;
+    String searchCategory = (category != null && category.trim().isEmpty()) ? null : category;
+    return productRepository.searchProducts(searchName, searchCategory, minPrice, maxPrice);
+}
+```
+
+**Step D: Repository Executes Dynamic Query**
+1. **Repository Layer** (`ProductRepository.java`):
+   - Uses JPQL with conditional parameters.
+   - NULL parameters are ignored in the WHERE clause.
 
 ```java
 @Query("SELECT p FROM Product p WHERE " +
@@ -34,155 +150,49 @@ List<Product> searchProducts(@Param("name") String name,
                             @Param("maxPrice") BigDecimal maxPrice);
 ```
 
-**How it works:**
-- Uses JPQL (Java Persistence Query Language) with conditional parameters
-- Each condition checks if the parameter is NULL first - if NULL, that condition is ignored
-- `LIKE LOWER(CONCAT('%', :name, '%'))` performs case-insensitive partial matching
-- All conditions are combined with `AND` operator
-
-#### Service Layer (`ProductServiceImpl.java`)
-
-```java
-@Override
-public List<Product> advancedSearch(String name, String category, 
-                                    BigDecimal minPrice, BigDecimal maxPrice) {
-    // Convert empty strings to null for proper query handling
-    String searchName = (name != null && name.trim().isEmpty()) ? null : name;
-    String searchCategory = (category != null && category.trim().isEmpty()) ? null : category;
-    return productRepository.searchProducts(searchName, searchCategory, minPrice, maxPrice);
-}
-```
-
-**How it works:**
-- Converts empty strings to null to ensure the JPQL query works correctly
-- Delegates to repository method
-
-#### Controller Layer (`ProductController.java`)
-
-```java
-@GetMapping("/advanced-search")
-public String advancedSearch(
-        @RequestParam(required = false) String name,
-        @RequestParam(required = false) String category,
-        @RequestParam(required = false) BigDecimal minPrice,
-        @RequestParam(required = false) BigDecimal maxPrice,
-        Model model) {
-    
-    List<Product> products = productService.advancedSearch(name, category, minPrice, maxPrice);
-    
-    model.addAttribute("products", products);
-    model.addAttribute("searchName", name);
-    model.addAttribute("searchCategory", category);
-    model.addAttribute("searchMinPrice", minPrice);
-    model.addAttribute("searchMaxPrice", maxPrice);
-    model.addAttribute("categories", productService.getAllCategories());
-    
-    return "product-list";
-}
-```
-
-**How it works:**
-- `@RequestParam(required = false)` makes all parameters optional
-- Calls service method with search criteria
-- Adds search results and form values to the model for view rendering
-
-#### View Layer (`product-list.html`)
-
-```html
-<div class="advanced-search-form">
-    <h3>🔎 Advanced Search</h3>
-    <form th:action="@{/products/advanced-search}" method="get">
-        <div class="form-row">
-            <div class="form-group">
-                <label for="searchName">Product Name</label>
-                <input type="text" id="searchName" name="name" 
-                       th:value="${searchName}" placeholder="Search by name..." />
-            </div>
-            <div class="form-group">
-                <label for="searchCategory">Category</label>
-                <select id="searchCategory" name="category">
-                    <option value="">All Categories</option>
-                    <option th:each="cat : ${categories}" 
-                            th:value="${cat}" 
-                            th:text="${cat}"
-                            th:selected="${cat == searchCategory}">
-                    </option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="minPrice">Min Price ($)</label>
-                <input type="number" id="minPrice" name="minPrice" 
-                       step="0.01" min="0" th:value="${searchMinPrice}" />
-            </div>
-            <div class="form-group">
-                <label for="maxPrice">Max Price ($)</label>
-                <input type="number" id="maxPrice" name="maxPrice" 
-                       step="0.01" min="0" th:value="${searchMaxPrice}" />
-            </div>
-        </div>
-        <button type="submit" class="btn btn-primary">🔍 Search</button>
-        <a th:href="@{/products}" class="btn btn-danger">❌ Clear</a>
-    </form>
-</div>
-```
-
-**Workflow Diagram:**
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
-│   User fills    │────▶│  Form submits    │────▶│   Controller       │
-│   search form   │     │  GET request     │     │   receives params  │
-└─────────────────┘     └──────────────────┘     └────────────────────┘
-                                                          │
-                                                          ▼
-┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
-│   View renders  │◀────│  Model contains  │◀────│   Service calls    │
-│   results       │     │  search results  │     │   Repository       │
-└─────────────────┘     └──────────────────┘     └────────────────────┘
-```
+**Step E: Results Rendered**
+1. **View Layer**: Thymeleaf iterates over filtered products and displays them in the table.
 
 ---
 
 ### Task 5.2: Category Filter (3 Points)
 
-**Objective:** Add a dropdown that shows all unique categories for filtering.
+**Objective:** Add a dropdown filter that shows all unique categories.
 
-#### Repository Layer
+**Step A: Fetch Unique Categories**
+1. **Repository Layer** (`ProductRepository.java`):
 
 ```java
 @Query("SELECT DISTINCT p.category FROM Product p ORDER BY p.category")
 List<String> findAllCategories();
 ```
 
-**How it works:**
-- `SELECT DISTINCT` returns only unique category values
-- `ORDER BY` sorts categories alphabetically
+**Step B: Controller Adds Categories to Model**
+1. **Controller Layer**: Every endpoint that returns to `product-list.html` includes categories:
 
-#### View Layer
-
-```html
-<div class="filter-section">
-    <form th:action="@{/products}" method="get">
-        <label><strong>Filter by Category:</strong></label>
-        <select name="category" onchange="this.form.submit()">
-            <option value="">All Categories</option>
-            <option th:each="cat : ${categories}" 
-                    th:value="${cat}" 
-                    th:text="${cat}"
-                    th:selected="${cat == selectedCategory}">
-            </option>
-        </select>
-        <!-- Preserve sorting when filtering -->
-        <input type="hidden" name="sortBy" th:value="${sortBy}" />
-        <input type="hidden" name="sortDir" th:value="${sortDir}" />
-    </form>
-</div>
+```java
+model.addAttribute("categories", productService.getAllCategories());
 ```
 
-**How it works:**
-- `onchange="this.form.submit()"` auto-submits when selection changes
-- Hidden inputs preserve current sorting state
-- `th:selected` maintains the selected value after form submission
+**Step C: View Renders Dropdown with Auto-Submit**
+1. **View Layer** (`product-list.html`):
+   - `onchange="this.form.submit()"` triggers form submission when selection changes.
+   - Hidden fields preserve current sort state.
+
+```html
+<form th:action="@{/products}" method="get">
+    <select name="category" onchange="this.form.submit()">
+        <option value="">All Categories</option>
+        <option th:each="cat : ${categories}" 
+                th:value="${cat}" 
+                th:text="${cat}"
+                th:selected="${cat == selectedCategory}">
+        </option>
+    </select>
+    <input type="hidden" name="sortBy" th:value="${sortBy}" />
+    <input type="hidden" name="sortDir" th:value="${sortDir}" />
+</form>
+```
 
 ---
 
@@ -190,17 +200,13 @@ List<String> findAllCategories();
 
 **Objective:** Implement pagination for search results.
 
-#### Repository Layer
+**Step A: User Searches with Keyword**
+1. **User Request**: User enters keyword and submits search form to `/products/search`.
 
-```java
-Page<Product> findByNameContaining(String keyword, Pageable pageable);
-```
-
-**How it works:**
-- Spring Data JPA automatically generates implementation
-- Returns `Page<Product>` containing results and pagination metadata
-
-#### Controller Layer
+**Step B: Controller Creates Pageable Request**
+1. **Controller Layer** (`ProductController.java`):
+   - Creates `Pageable` object with page number and size.
+   - Returns `Page<Product>` with pagination metadata.
 
 ```java
 @GetMapping("/search")
@@ -217,48 +223,40 @@ public String searchProducts(
     model.addAttribute("currentPage", page);
     model.addAttribute("totalPages", productPage.getTotalPages());
     model.addAttribute("totalItems", productPage.getTotalElements());
-    
     return "product-list";
 }
 ```
 
-**How it works:**
-- `PageRequest.of(page, size)` creates a Pageable object
-- `Page` interface provides: content, total pages, total elements, etc.
+**Step C: Repository Returns Paginated Results**
+1. **Repository Layer** (`ProductRepository.java`):
+   - Spring Data JPA auto-generates implementation.
 
-#### View Layer - Pagination Controls
+```java
+Page<Product> findByNameContaining(String keyword, Pageable pageable);
+```
+
+**Step D: View Renders Pagination Controls**
+1. **View Layer** (`product-list.html`):
 
 ```html
 <div th:if="${totalPages != null and totalPages > 1}" class="pagination">
-    <!-- Previous Button -->
     <a th:if="${currentPage > 0}" 
-       th:href="@{/products/search(keyword=${keyword},page=${currentPage - 1},size=10)}">
+       th:href="@{/products/search(keyword=${keyword},page=${currentPage - 1})}">
        « Previous
     </a>
     
-    <!-- Page Numbers -->
     <th:block th:each="i : ${#numbers.sequence(0, totalPages - 1)}">
-        <a th:if="${i != currentPage}"
-           th:href="@{/products/search(keyword=${keyword},page=${i},size=10)}"
-           th:text="${i + 1}">1</a>
         <span th:if="${i == currentPage}" class="active" th:text="${i + 1}">1</span>
+        <a th:if="${i != currentPage}"
+           th:href="@{/products/search(keyword=${keyword},page=${i})}"
+           th:text="${i + 1}">1</a>
     </th:block>
     
-    <!-- Next Button -->
     <a th:if="${currentPage < totalPages - 1}" 
-       th:href="@{/products/search(keyword=${keyword},page=${currentPage + 1},size=10)}">
+       th:href="@{/products/search(keyword=${keyword},page=${currentPage + 1})}">
        Next »
     </a>
 </div>
-```
-
-**Pagination Workflow:**
-
-```
-Page 0: Products 1-10   ──▶  Page 1: Products 11-20  ──▶  Page 2: Products 21-30
-    │                            │                            │
-    ▼                            ▼                            ▼
-[1] 2  3  Next              Prev [2] 3  Next            Prev 1  2  [3]
 ```
 
 ---
@@ -269,11 +267,10 @@ Page 0: Products 1-10   ──▶  Page 1: Products 11-20  ──▶  Page 2: Pr
 
 **Objective:** Add validation constraints to the Product entity.
 
-#### Entity Layer (`Product.java`)
+**Entity Layer** (`Product.java`):
+- Uses Jakarta Validation annotations to enforce business rules.
 
 ```java
-import jakarta.validation.constraints.*;
-
 @Entity
 @Table(name = "products")
 public class Product {
@@ -285,42 +282,37 @@ public class Product {
     @NotBlank(message = "Product code is required")
     @Size(min = 3, max = 20, message = "Product code must be 3-20 characters")
     @Pattern(regexp = "^P\\d{3,}$", message = "Product code must start with P followed by at least 3 numbers")
-    @Column(name = "product_code", unique = true, nullable = false, length = 20)
     private String productCode;
     
     @NotBlank(message = "Product name is required")
     @Size(min = 3, max = 100, message = "Name must be 3-100 characters")
-    @Column(nullable = false, length = 100)
     private String name;
     
     @NotNull(message = "Price is required")
     @DecimalMin(value = "0.01", message = "Price must be greater than 0")
     @DecimalMax(value = "999999.99", message = "Price is too high")
-    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
     
     @NotNull(message = "Quantity is required")
     @Min(value = 0, message = "Quantity cannot be negative")
-    @Column(nullable = false)
     private Integer quantity;
     
     @NotBlank(message = "Category is required")
-    @Column(length = 50)
     private String category;
 }
 ```
 
-**Validation Annotations Explained:**
+**Validation Annotations Summary:**
 
-| Annotation | Purpose | Example |
-|------------|---------|---------|
-| `@NotBlank` | String must not be null, empty, or whitespace | Required fields |
-| `@NotNull` | Value must not be null | Non-string required fields |
-| `@Size` | String length constraints | `@Size(min=3, max=20)` |
-| `@Pattern` | Must match regex pattern | `@Pattern(regexp="^P\\d{3,}$")` |
-| `@DecimalMin` | Minimum decimal value | `@DecimalMin("0.01")` |
-| `@DecimalMax` | Maximum decimal value | `@DecimalMax("999999.99")` |
-| `@Min` | Minimum integer value | `@Min(0)` |
+| Annotation | Field | Rule |
+|------------|-------|------|
+| `@NotBlank` | productCode, name, category | Cannot be null, empty, or whitespace |
+| `@Size` | productCode, name | Length constraints |
+| `@Pattern` | productCode | Must match `P` + 3+ digits (e.g., P001) |
+| `@NotNull` | price, quantity | Cannot be null |
+| `@DecimalMin` | price | Minimum value 0.01 |
+| `@DecimalMax` | price | Maximum value 999999.99 |
+| `@Min` | quantity | Minimum value 0 |
 
 ---
 
@@ -328,10 +320,15 @@ public class Product {
 
 **Objective:** Validate input in the controller and handle errors.
 
-```java
-import jakarta.validation.Valid;
-import org.springframework.validation.BindingResult;
+**Step A: User Submits Form**
+1. **User Request**: User fills product form and submits POST to `/products/save`.
 
+**Step B: Controller Validates Input**
+1. **Controller Layer** (`ProductController.java`):
+   - `@Valid` triggers validation.
+   - `BindingResult` captures errors (must immediately follow `@Valid` parameter).
+
+```java
 @PostMapping("/save")
 public String saveProduct(
         @Valid @ModelAttribute("product") Product product,
@@ -355,28 +352,15 @@ public String saveProduct(
 }
 ```
 
-**How it works:**
-1. `@Valid` triggers validation of the Product object
-2. `BindingResult` captures validation errors (must be immediately after `@Valid` parameter)
-3. If errors exist, return to form without saving
-4. If valid, save and redirect with success message
-
 **Validation Flow:**
-
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
-│   User submits  │────▶│   @Valid checks  │────▶│   Errors found?    │
-│   form          │     │   Product fields │     │                    │
-└─────────────────┘     └──────────────────┘     └────────────────────┘
-                                                          │
-                                    ┌─────────────────────┴─────────────────────┐
-                                    │                                           │
-                                    ▼                                           ▼
-                        ┌──────────────────┐                       ┌──────────────────┐
-                        │   YES: Return    │                       │   NO: Save to    │
-                        │   to form with   │                       │   database and   │
-                        │   error messages │                       │   redirect       │
-                        └──────────────────┘                       └──────────────────┘
+User submits form → @Valid triggers validation → Errors found?
+                                                      │
+                    ┌─────────────────────────────────┴─────────────────────────────────┐
+                    │ YES                                                               │ NO
+                    ▼                                                                   ▼
+            Return to form with                                                 Save to database
+            error messages displayed                                            and redirect
 ```
 
 ---
@@ -385,11 +369,11 @@ public String saveProduct(
 
 **Objective:** Show validation errors in the form.
 
-#### View Layer (`product-form.html`)
+**View Layer** (`product-form.html`):
 
 ```html
 <div class="form-group">
-    <label for="productCode">Product Code <span class="required-indicator">*</span></label>
+    <label for="productCode">Product Code *</label>
     <input type="text" 
            id="productCode" 
            th:field="*{productCode}" 
@@ -402,8 +386,7 @@ public String saveProduct(
 </div>
 ```
 
-#### CSS Styles
-
+**CSS Styles:**
 ```css
 .error { 
     border-color: red !important; 
@@ -412,21 +395,13 @@ public String saveProduct(
 .error-message { 
     color: red; 
     font-size: 12px; 
-    margin-top: 5px; 
-    display: block; 
-}
-
-.validation-hint {
-    color: #666;
-    font-size: 11px;
-    margin-top: 3px;
 }
 ```
 
 **How it works:**
-- `th:errorclass="error"` adds "error" class when field has errors
-- `th:if="${#fields.hasErrors('fieldName')}"` checks if field has errors
-- `th:errors="*{fieldName}"` displays the error message
+- `th:errorclass="error"` adds CSS class when field has errors.
+- `th:if="${#fields.hasErrors('fieldName')}"` conditionally shows error message.
+- `th:errors="*{fieldName}"` displays the validation message.
 
 ---
 
@@ -436,7 +411,12 @@ public String saveProduct(
 
 **Objective:** Allow users to sort products by clicking column headers.
 
-#### Controller Layer
+**Step A: User Clicks Column Header**
+1. **User Request**: User clicks "Name" column header.
+2. **URL Generated**: `/products?sortBy=name&sortDir=asc`
+
+**Step B: Controller Processes Sort Parameters**
+1. **Controller Layer** (`ProductController.java`):
 
 ```java
 @GetMapping
@@ -460,12 +440,12 @@ public String listProducts(
     model.addAttribute("products", products);
     model.addAttribute("sortBy", sortBy);
     model.addAttribute("sortDir", sortDir);
-    
     return "product-list";
 }
 ```
 
-#### Service Layer
+**Step C: Service Delegates to Repository**
+1. **Service Layer** (`ProductServiceImpl.java`):
 
 ```java
 @Override
@@ -474,39 +454,35 @@ public List<Product> getAllProducts(Sort sort) {
 }
 ```
 
-#### View Layer - Sortable Headers
+**Step D: View Renders Sortable Headers**
+1. **View Layer** (`product-list.html`):
+   - Clicking toggles between ASC and DESC.
+   - Arrow indicator shows current sort direction.
 
 ```html
 <th>
-    <a th:href="@{/products(sortBy='name',sortDir=${sortDir=='asc' and sortBy=='name' ? 'desc' : 'asc'},category=${selectedCategory})}">
+    <a th:href="@{/products(sortBy='name',sortDir=${sortDir=='asc' and sortBy=='name' ? 'desc' : 'asc'})}">
         Name
-        <span class="sort-indicator" th:if="${sortBy=='name'}" 
-              th:text="${sortDir=='asc' ? '↑' : '↓'}"></span>
+        <span th:if="${sortBy=='name'}" th:text="${sortDir=='asc' ? '↑' : '↓'}"></span>
     </a>
 </th>
 ```
 
-**How it works:**
-- Clicking header toggles between ascending and descending
-- Current sort column shows arrow indicator (↑ or ↓)
-- Category filter is preserved in URL
-
 **Sorting Logic:**
-
 ```
-Click "Name" (unsorted)  ──▶  Sort by name ASC (↑)
-Click "Name" (ASC)       ──▶  Sort by name DESC (↓)
-Click "Name" (DESC)      ──▶  Sort by name ASC (↑)
+Click "Name" (unsorted)  →  Sort by name ASC (↑)
+Click "Name" (ASC ↑)     →  Sort by name DESC (↓)
+Click "Name" (DESC ↓)    →  Sort by name ASC (↑)
 ```
 
 ---
 
-### Task 7.2 & 7.3: Category Filter with Sorting (5 Points)
+### Task 7.2 & 7.3: Combined Sorting and Filtering (5 Points)
 
-**Objective:** Combine filtering and sorting in one interface.
+**Objective:** Combine category filtering with sorting.
 
+**Controller Logic:**
 ```java
-// In Controller
 if (category != null && !category.isEmpty()) {
     products = productService.getProductsByCategory(category);
     if (sortBy != null && !sortBy.isEmpty()) {
@@ -520,20 +496,14 @@ if (category != null && !category.isEmpty()) {
 }
 ```
 
-**Combined Workflow:**
+**View Preserves Both States:**
+```html
+<!-- Category filter preserves sort -->
+<input type="hidden" name="sortBy" th:value="${sortBy}" />
+<input type="hidden" name="sortDir" th:value="${sortDir}" />
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Product List View                        │
-├─────────────────────────────────────────────────────────────┤
-│  Filter: [Electronics ▼]     Sort: Name ↑                   │
-├─────────────────────────────────────────────────────────────┤
-│  Name ↑    │  Price  │  Quantity  │  Category              │
-├────────────┼─────────┼────────────┼────────────────────────┤
-│  iPhone    │  $999   │  50        │  Electronics           │
-│  Laptop    │  $1299  │  30        │  Electronics           │
-│  Tablet    │  $599   │  75        │  Electronics           │
-└─────────────────────────────────────────────────────────────┘
+<!-- Sort links preserve category -->
+<a th:href="@{/products(sortBy='name',sortDir=...,category=${selectedCategory})}">
 ```
 
 ---
@@ -544,14 +514,14 @@ if (category != null && !category.isEmpty()) {
 
 **Objective:** Add repository methods for calculating statistics.
 
-#### Repository Layer
+**Repository Layer** (`ProductRepository.java`):
 
 ```java
 // Count products by category
 @Query("SELECT COUNT(p) FROM Product p WHERE p.category = :category")
 long countByCategory(@Param("category") String category);
 
-// Calculate total inventory value (price × quantity for all products)
+// Calculate total inventory value (price × quantity)
 @Query("SELECT SUM(p.price * p.quantity) FROM Product p")
 BigDecimal calculateTotalValue();
 
@@ -559,17 +529,25 @@ BigDecimal calculateTotalValue();
 @Query("SELECT AVG(p.price) FROM Product p")
 BigDecimal calculateAveragePrice();
 
-// Find products with low stock
+// Find products with low stock (quantity < threshold)
 @Query("SELECT p FROM Product p WHERE p.quantity < :threshold")
 List<Product> findLowStockProducts(@Param("threshold") int threshold);
 
-// Get recent products (last 5 added)
+// Get 5 most recently added products
 List<Product> findTop5ByOrderByCreatedAtDesc();
 ```
 
 ---
 
 ### Task 8.2: Dashboard Controller (2 Points)
+
+**Objective:** Create controller to serve dashboard statistics.
+
+**Step A: User Accesses Dashboard**
+1. **User Request**: User navigates to `/dashboard`.
+
+**Step B: Controller Gathers Statistics**
+1. **Controller Layer** (`DashboardController.java`):
 
 ```java
 @Controller
@@ -581,9 +559,8 @@ public class DashboardController {
     
     @GetMapping
     public String showDashboard(Model model) {
-        // Total products count
-        long totalProducts = productService.getTotalProductCount();
-        model.addAttribute("totalProducts", totalProducts);
+        // Total products
+        model.addAttribute("totalProducts", productService.getTotalProductCount());
         
         // Products by category
         List<String> categories = productService.getAllCategories();
@@ -591,24 +568,17 @@ public class DashboardController {
         for (String category : categories) {
             productsByCategory.put(category, productService.getProductCountByCategory(category));
         }
-        model.addAttribute("categories", categories);
         model.addAttribute("productsByCategory", productsByCategory);
         
-        // Total inventory value
-        BigDecimal totalValue = productService.getTotalInventoryValue();
-        model.addAttribute("totalValue", totalValue);
+        // Financial statistics
+        model.addAttribute("totalValue", productService.getTotalInventoryValue());
+        model.addAttribute("averagePrice", productService.getAveragePrice());
         
-        // Average product price
-        BigDecimal averagePrice = productService.getAveragePrice();
-        model.addAttribute("averagePrice", averagePrice);
+        // Alerts
+        model.addAttribute("lowStockProducts", productService.getLowStockProducts(10));
         
-        // Low stock alerts (quantity < 10)
-        List<Product> lowStockProducts = productService.getLowStockProducts(10);
-        model.addAttribute("lowStockProducts", lowStockProducts);
-        
-        // Recent products (last 5 added)
-        List<Product> recentProducts = productService.getRecentProducts();
-        model.addAttribute("recentProducts", recentProducts);
+        // Recent activity
+        model.addAttribute("recentProducts", productService.getRecentProducts());
         
         return "dashboard";
     }
@@ -619,8 +589,11 @@ public class DashboardController {
 
 ### Task 8.3: Dashboard View (2 Points)
 
-#### Statistics Cards
+**Objective:** Create visual dashboard with statistics cards, charts, and tables.
 
+**View Layer** (`dashboard.html`):
+
+**Statistics Cards:**
 ```html
 <div class="stats-grid">
     <div class="stat-card">
@@ -628,32 +601,31 @@ public class DashboardController {
         <div class="stat-label">📦 Total Products</div>
     </div>
     
-    <div class="stat-card success">
-        <div class="stat-value" th:text="'$' + ${#numbers.formatDecimal(totalValue, 1, 2)}">$0.00</div>
+    <div class="stat-card">
+        <div class="stat-value" th:text="'$' + ${#numbers.formatDecimal(totalValue, 1, 2)}">$0</div>
         <div class="stat-label">💰 Total Inventory Value</div>
     </div>
     
-    <div class="stat-card info">
-        <div class="stat-value" th:text="'$' + ${#numbers.formatDecimal(averagePrice, 1, 2)}">$0.00</div>
+    <div class="stat-card">
+        <div class="stat-value" th:text="'$' + ${#numbers.formatDecimal(averagePrice, 1, 2)}">$0</div>
         <div class="stat-label">📈 Average Price</div>
     </div>
     
     <div class="stat-card warning">
-        <div class="stat-value" th:text="${lowStockCount}">0</div>
+        <div class="stat-value" th:text="${#lists.size(lowStockProducts)}">0</div>
         <div class="stat-label">⚠️ Low Stock Items</div>
     </div>
 </div>
 ```
 
-#### Bar Chart for Categories
-
+**Category Bar Chart:**
 ```html
 <div class="bar-chart">
-    <div class="bar-item" th:each="category : ${categories}">
+    <div th:each="category : ${categories}" class="bar-item">
         <span class="bar-label" th:text="${category}">Category</span>
         <div class="bar-container">
             <div class="bar-fill" 
-                 th:style="'width: ' + ${totalProducts > 0 ? (productsByCategory[category] * 100 / totalProducts) : 0} + '%'">
+                 th:style="'width:' + ${productsByCategory[category] * 100 / totalProducts} + '%'">
             </div>
         </div>
         <span class="bar-value" th:text="${productsByCategory[category]}">0</span>
@@ -661,8 +633,7 @@ public class DashboardController {
 </div>
 ```
 
-#### Low Stock Alerts Table
-
+**Low Stock Alerts Table:**
 ```html
 <table>
     <thead>
@@ -671,80 +642,45 @@ public class DashboardController {
             <th>Name</th>
             <th>Category</th>
             <th>Quantity</th>
-            <th>Price</th>
         </tr>
     </thead>
     <tbody>
         <tr th:each="product : ${lowStockProducts}" class="low-stock-row">
             <td th:text="${product.productCode}">P001</td>
-            <td th:text="${product.name}">Product Name</td>
+            <td th:text="${product.name}">Product</td>
             <td th:text="${product.category}">Category</td>
             <td th:text="${product.quantity}">5</td>
-            <td th:text="'$' + ${#numbers.formatDecimal(product.price, 1, 2)}">$99.99</td>
         </tr>
     </tbody>
 </table>
 ```
 
 **Dashboard Layout:**
-
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     📊 Product Statistics Dashboard                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐            │
-│  │    150    │  │ $45,230   │  │  $301.53  │  │     8     │            │
-│  │  Products │  │   Value   │  │ Avg Price │  │ Low Stock │            │
-│  └───────────┘  └───────────┘  └───────────┘  └───────────┘            │
-├─────────────────────────────────────────────────────────────────────────┤
-│  📂 Products by Category                                                │
-│  ┌──────────────────────────────────────────────────────────┐          │
-│  │ Electronics  ████████████████████  45                    │          │
-│  │ Furniture    ██████████████  35                          │          │
-│  │ Clothing     ████████████  30                            │          │
-│  │ Books        ████████  20                                │          │
-│  │ Food         ████████  20                                │          │
-│  └──────────────────────────────────────────────────────────┘          │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ⚠️ Low Stock Alerts (Quantity < 10)                                    │
-│  ┌──────┬────────────────┬─────────────┬──────────┬─────────┐          │
-│  │ Code │ Name           │ Category    │ Quantity │ Price   │          │
-│  ├──────┼────────────────┼─────────────┼──────────┼─────────┤          │
-│  │ P001 │ Widget A       │ Electronics │    3     │ $29.99  │          │
-│  │ P015 │ Gadget B       │ Electronics │    5     │ $49.99  │          │
-│  └──────┴────────────────┴─────────────┴──────────┴─────────┘          │
-├─────────────────────────────────────────────────────────────────────────┤
-│  🕐 Recent Products (Last 5 Added)                                      │
-│  ┌──────┬────────────────┬─────────────┬─────────┬─────────────────┐   │
-│  │ Code │ Name           │ Category    │ Price   │ Added           │   │
-│  ├──────┼────────────────┼─────────────┼─────────┼─────────────────┤   │
-│  │ P150 │ New Product    │ Clothing    │ $59.99  │ Dec 05, 2025    │   │
-│  └──────┴────────────────┴─────────────┴─────────┴─────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Project Structure Summary
-
-```
-src/main/java/com/example/product_management/
-├── ProductManagementApplication.java    # Main entry point
-├── controller/
-│   ├── ProductController.java           # Product CRUD + Search + Sort
-│   └── DashboardController.java         # Statistics dashboard
-├── entity/
-│   └── Product.java                     # Entity with validations
-├── repository/
-│   └── ProductRepository.java           # Data access layer
-└── service/
-    ├── ProductService.java              # Service interface
-    └── ProductServiceImpl.java          # Service implementation
-
-src/main/resources/templates/
-├── product-list.html                    # Product listing with search/sort/filter
-├── product-form.html                    # Add/Edit form with validation
-└── dashboard.html                       # Statistics dashboard
+┌─────────────────────────────────────────────────────────────────────┐
+│                   📊 Product Statistics Dashboard                    │
+├─────────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐            │
+│  │   150    │  │ $45,230  │  │ $301.53  │  │    8     │            │
+│  │ Products │  │  Value   │  │ Avg Price│  │Low Stock │            │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘            │
+├─────────────────────────────────────────────────────────────────────┤
+│  📂 Products by Category                                            │
+│  Electronics  ████████████████████  45                              │
+│  Furniture    ██████████████  35                                    │
+│  Clothing     ████████████  30                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│  ⚠️ Low Stock Alerts (Quantity < 10)                                │
+│  ┌──────┬────────────┬─────────────┬──────────┐                    │
+│  │ P001 │ Widget A   │ Electronics │    3     │                    │
+│  │ P015 │ Gadget B   │ Electronics │    5     │                    │
+│  └──────┴────────────┴─────────────┴──────────┘                    │
+├─────────────────────────────────────────────────────────────────────┤
+│  🕐 Recent Products (Last 5 Added)                                  │
+│  ┌──────┬────────────┬─────────────┬─────────────────┐             │
+│  │ P150 │ New Item   │ Clothing    │ Dec 05, 2025    │             │
+│  └──────┴────────────┴─────────────┴─────────────────┘             │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -764,24 +700,18 @@ src/main/resources/templates/
 
 ---
 
-## Technologies Used
-
-- **Spring Boot 3.5.x** - Application framework
-- **Spring Data JPA** - Data persistence
-- **Hibernate** - ORM
-- **Thymeleaf** - Template engine
-- **Jakarta Validation** - Bean validation
-- **MySQL** - Database
-- **Maven** - Build tool
-
----
-
 ## How to Run
 
-1. Ensure MySQL is running and database is configured in `application.properties`
-2. Run the application:
+1. Ensure MySQL is running with database `product_management`
+2. Configure `application.properties`:
+   ```properties
+   spring.datasource.url=jdbc:mysql://localhost:3306/product_management
+   spring.datasource.username=your_username
+   spring.datasource.password=your_password
+   ```
+3. Run the application:
    ```bash
    ./mvnw spring-boot:run
    ```
-3. Access the application at: `http://localhost:8080/products`
-4. Access the dashboard at: `http://localhost:8080/dashboard`
+4. Access the application at: http://localhost:8080/products
+5. Access the dashboard at: http://localhost:8080/dashboard
