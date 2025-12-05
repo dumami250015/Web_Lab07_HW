@@ -57,6 +57,24 @@
             min-height: 100px;
         }
         
+        /* Task 6.3: Validation Error Styles */
+        .error {
+            border-color: red !important;
+        }
+        
+        .error-message {
+            color: red;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+        
+        .validation-hint {
+            color: #666;
+            font-size: 11px;
+            margin-top: 3px;
+        }
+        
         .btn {
             padding: 12px 30px;
             border: none;
@@ -91,6 +109,10 @@
             display: flex;
             justify-content: center;
         }
+        
+        .required-indicator {
+            color: red;
+        }
     </style>
 </head>
 <body>
@@ -102,47 +124,64 @@
             <input type="hidden" th:field="*{id}" />
             
             <div class="form-group">
-                <label for="productCode">Product Code *</label>
+                <label for="productCode">Product Code <span class="required-indicator">*</span></label>
                 <input type="text" 
                        id="productCode" 
                        th:field="*{productCode}" 
-                       placeholder="Enter product code (e.g., P001)"
-                       required />
+                       th:errorclass="error"
+                       placeholder="Enter product code (e.g., P001)" />
+                <span th:if="${#fields.hasErrors('productCode')}" 
+                      th:errors="*{productCode}" 
+                      class="error-message">Error</span>
+                <span class="validation-hint">Must start with P followed by at least 3 numbers (e.g., P001, P1234)</span>
             </div>
             
             <div class="form-group">
-                <label for="name">Product Name *</label>
+                <label for="name">Product Name <span class="required-indicator">*</span></label>
                 <input type="text" 
                        id="name" 
                        th:field="*{name}" 
-                       placeholder="Enter product name"
-                       required />
+                       th:errorclass="error"
+                       placeholder="Enter product name" />
+                <span th:if="${#fields.hasErrors('name')}" 
+                      th:errors="*{name}" 
+                      class="error-message">Error</span>
+                <span class="validation-hint">Must be 3-100 characters</span>
             </div>
             
             <div class="form-group">
-                <label for="price">Price ($) *</label>
+                <label for="price">Price ($) <span class="required-indicator">*</span></label>
                 <input type="number" 
                        id="price" 
                        th:field="*{price}" 
+                       th:errorclass="error"
                        step="0.01" 
-                       min="0"
-                       placeholder="0.00"
-                       required />
+                       min="0.01"
+                       max="999999.99"
+                       placeholder="0.00" />
+                <span th:if="${#fields.hasErrors('price')}" 
+                      th:errors="*{price}" 
+                      class="error-message">Error</span>
+                <span class="validation-hint">Must be between $0.01 and $999,999.99</span>
             </div>
             
             <div class="form-group">
-                <label for="quantity">Quantity *</label>
+                <label for="quantity">Quantity <span class="required-indicator">*</span></label>
                 <input type="number" 
                        id="quantity" 
                        th:field="*{quantity}" 
+                       th:errorclass="error"
                        min="0"
-                       placeholder="0"
-                       required />
+                       placeholder="0" />
+                <span th:if="${#fields.hasErrors('quantity')}" 
+                      th:errors="*{quantity}" 
+                      class="error-message">Error</span>
+                <span class="validation-hint">Cannot be negative</span>
             </div>
             
             <div class="form-group">
-                <label for="category">Category *</label>
-                <select id="category" th:field="*{category}" required>
+                <label for="category">Category <span class="required-indicator">*</span></label>
+                <select id="category" th:field="*{category}" th:errorclass="error">
                     <option value="">Select category</option>
                     <option value="Electronics">Electronics</option>
                     <option value="Furniture">Furniture</option>
@@ -151,6 +190,9 @@
                     <option value="Food">Food</option>
                     <option value="Other">Other</option>
                 </select>
+                <span th:if="${#fields.hasErrors('category')}" 
+                      th:errors="*{category}" 
+                      class="error-message">Error</span>
             </div>
             
             <div class="form-group">

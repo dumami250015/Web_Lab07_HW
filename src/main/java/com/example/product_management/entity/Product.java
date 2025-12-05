@@ -10,6 +10,13 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 @Entity
 @Table(name = "products")
@@ -19,18 +26,29 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
+    @NotBlank(message = "Product code is required")
+    @Size(min = 3, max = 20, message = "Product code must be 3-20 characters")
+    @Pattern(regexp = "^P\\d{3,}$", message = "Product code must start with P followed by at least 3 numbers")
     @Column(name = "product_code", unique = true, nullable = false, length = 20)
     private String productCode;
     
+    @NotBlank(message = "Product name is required")
+    @Size(min = 3, max = 100, message = "Name must be 3-100 characters")
     @Column(nullable = false, length = 100)
     private String name;
     
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.01", message = "Price must be greater than 0")
+    @DecimalMax(value = "999999.99", message = "Price is too high")
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
     
+    @NotNull(message = "Quantity is required")
+    @Min(value = 0, message = "Quantity cannot be negative")
     @Column(nullable = false)
     private Integer quantity;
     
+    @NotBlank(message = "Category is required")
     @Column(length = 50)
     private String category;
     
